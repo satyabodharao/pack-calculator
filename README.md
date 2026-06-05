@@ -49,9 +49,9 @@ HTTP request
 - The `service` holds business rules and is independently testable without a
   running HTTP server.
 - The `api` layer is thin: it only translates between HTTP and the service.
+```
 
 ---
-
 
 ## API reference
 
