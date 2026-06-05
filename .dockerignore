@@ -1,0 +1,12 @@
+.git
+.gitignore
+.dockerignore
+README.md
+*.md
+.idea
+.vscode
+.DS_Store
+*.test
+coverage.out
+server
+out/

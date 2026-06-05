@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Packs Calculator</title>
+  <style>
+    :root { --green: #5cb85c; --green-dark: #4cae4c; --border: #ddd; --header-bg: #f3f3f3; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      max-width: 720px; margin: 32px auto; padding: 0 16px; color: #222;
+    }
+    h1, h2 { font-weight: 800; }
+    h1 { font-size: 2.4rem; margin-bottom: 24px; }
+    h2 { font-size: 1.8rem; margin-top: 40px; }
+    .card { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 16px; }
+    .card-header { background: var(--header-bg); padding: 12px 16px; font-weight: 700; border-bottom: 1px solid var(--border); }
+    .card-body { padding: 16px; }
+    .pack-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    input[type="number"] {
+      padding: 8px; border: 2px solid #333; border-radius: 2px; width: 140px; font-size: 1rem;
+    }
+    button {
+      background: var(--green); color: #fff; border: none; padding: 12px 18px;
+      font-size: 1rem; border-radius: 3px; cursor: pointer;
+    }
+    button:hover { background: var(--green-dark); }
+    button.secondary { background: #777; padding: 6px 12px; font-size: 0.85rem; }
+    button.secondary:hover { background: #555; }
+    .row-inline { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    th, td { border: 1px solid var(--border); padding: 12px 16px; text-align: left; }
+    th { background: var(--header-bg); }
+    .msg { margin-top: 10px; font-size: 0.9rem; }
+    .msg.error { color: #c0392b; }
+    .msg.ok { color: var(--green-dark); }
+    .summary { margin-top: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Order Packs Calculator</h1>
+
+  <!-- ===================== Pack sizes configuration ===================== -->
+  <div class="card">
+    <div class="card-header">Pack Sizes</div>
+    <div class="card-body">
+      <div id="packSizesList"><!-- pack size inputs injected here --></div>
+      <button class="secondary" type="button" onclick="addPackRow()">+ Add pack size</button>
+    </div>
+  </div>
+  <button type="button" onclick="submitPackSizes()">Submit pack sizes change</button>
+  <div id="packMsg" class="msg"></div>
+
+  <!-- ===================== Order calculation ===================== -->
+  <h2>Calculate packs for order</h2>
+  <div class="row-inline">
+    <label for="itemsInput">Items:</label>
+    <input type="number" id="itemsInput" min="1" value="263" />
+    <button type="button" onclick="calculate()">Calculate</button>
+  </div>
+  <div id="calcMsg" class="msg"></div>
+
+  <table id="resultTable" style="display:none;">
+    <thead><tr><th>Pack</th><th>Quantity</th></tr></thead>
+    <tbody id="resultBody"></tbody>
+  </table>
+  <div id="resultSummary" class="summary"></div>
+
+  <script>
+    // Base path is empty because the UI is served by the same Go server.
+    const API = "";
+
+    // ---- Pack size editing -------------------------------------------------
+
+    // Render one editable input row per pack size value.
+    function renderPackSizes(sizes) {
+      const list = document.getElementById("packSizesList");
+      list.innerHTML = "";
+      sizes.forEach(addPackRow);
+    }
+
+    // Append a single pack-size input row (optionally pre-filled with a value).
+    function addPackRow(value) {
+      const list = document.getElementById("packSizesList");
+      const row = document.createElement("div");
+      row.className = "pack-row";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "1";
+      input.className = "pack-size-input";
+      if (typeof value === "number") input.value = value;
+      const remove = document.createElement("button");
+      remove.className = "secondary";
+      remove.textContent = "Remove";
+      remove.type = "button";
+      remove.onclick = () => row.remove();
+      row.appendChild(input);
+      row.appendChild(remove);
+      list.appendChild(row);
+    }
+
+    // Load the currently configured pack sizes from the API on page load.
+    async function loadPackSizes() {
+      try {
+        const res = await fetch(`${API}/api/pack-sizes`);
+        const data = await res.json();
+        renderPackSizes(data.pack_sizes || []);
+      } catch (err) {
+        setMsg("packMsg", "Failed to load pack sizes: " + err, true);
+      }
+    }
+
+    // Collect the input values and PUT them to the API.
+    async function submitPackSizes() {
+      const inputs = document.querySelectorAll(".pack-size-input");
+      const sizes = [];
+      for (const el of inputs) {
+        const n = parseInt(el.value, 10);
+        if (!isNaN(n)) sizes.push(n);
+      }
+      try {
+        const res = await fetch(`${API}/api/pack-sizes`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pack_sizes: sizes }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "request failed");
+        renderPackSizes(data.pack_sizes);
+        setMsg("packMsg", "Pack sizes saved: " + data.pack_sizes.join(", "), false);
+      } catch (err) {
+        setMsg("packMsg", "Error: " + err.message, true);
+      }
+    }
+
+    // ---- Calculation -------------------------------------------------------
+
+    async function calculate() {
+      const items = parseInt(document.getElementById("itemsInput").value, 10);
+      try {
+        const res = await fetch(`${API}/api/calculate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "request failed");
+        renderResult(data);
+        setMsg("calcMsg", "", false);
+      } catch (err) {
+        document.getElementById("resultTable").style.display = "none";
+        document.getElementById("resultSummary").textContent = "";
+        setMsg("calcMsg", "Error: " + err.message, true);
+      }
+    }
+
+    // Render the resulting packs into the Pack / Quantity table.
+    function renderResult(data) {
+      const body = document.getElementById("resultBody");
+      body.innerHTML = "";
+      (data.packs || []).forEach((p) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${p.size}</td><td>${p.count}</td>`;
+        body.appendChild(tr);
+      });
+      document.getElementById("resultTable").style.display = "table";
+      document.getElementById("resultSummary").textContent =
+        `Total items shipped: ${data.total_items} · Total packs: ${data.total_packs}`;
+    }
+
+    // ---- Helpers -----------------------------------------------------------
+
+    function setMsg(id, text, isError) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = "msg " + (text ? (isError ? "error" : "ok") : "");
+    }
+
+    // Initial load.
+    loadPackSizes();
+  </script>
+</body>
+</html>

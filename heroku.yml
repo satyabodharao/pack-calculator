@@ -1,0 +1,10 @@
+# Heroku container deployment descriptor.
+#
+# With the stack set to "container" (heroku stack:set container), Heroku builds
+# the image from the Dockerfile and runs the web process. The app binds to the
+# $PORT that Heroku provides at runtime.
+build:
+  docker:
+    web: Dockerfile
+run:
+  web: /app/server
